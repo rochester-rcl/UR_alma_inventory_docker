@@ -1,11 +1,21 @@
 <?php
+
+date_default_timezone_set('America/New_York'); // Change to your timezone
+
+define('APP_ROOT', __DIR__ . '/');
+
+
 $progress_id = uniqid('prog_', true);
-// Clean up any stale progress files older than 1 hour
-foreach (glob('/tmp/progress_*.json') as $f) {
+
+// Clean up old progress files locally
+$progress_dir = APP_ROOT . 'cache/progress';
+if (!is_dir($progress_dir)) mkdir($progress_dir, 0755, true);
+foreach (glob($progress_dir . '/progress_*.json') as $f) {
     if (filemtime($f) < time() - 3600) @unlink($f);
 }
-//require("login.php");
-require("key.php");
+
+require_once(__DIR__ . '/key.php');
+
 
 // Fetch libraries from Alma API
 $ch = curl_init();
@@ -464,7 +474,7 @@ if ($xml_result) {
 <!-- ===== Main Card ===== -->
 <main class="card">
     <iframe name="process_frame" id="process_frame" style="display:none;"></iframe>
-    <form method="post" name="ShelfLister" id="ShelfLister" action="process_barcodes.php" enctype="multipart/form-data" target="process_frame">
+    <form method="post" name="ShelfLister" id="ShelfLister" action="process_barcodes.php" enctype="multipart/form-data">
         <input type="hidden" name="progress_id" value="<?php echo $progress_id; ?>" />
 
         <!-- File Upload -->
@@ -475,7 +485,7 @@ if ($xml_result) {
                 <p class="upload-text"><strong>Click to browse</strong> or drag & drop your file</p>
                 <p class="upload-text" style="font-size:0.75rem; margin-top:0.25rem;">Accepts .xlsx barcode files</p>
                 <p class="file-name" id="file-display-name"></p>
-                <input type="file" id="flie" class="required" name="file" accept=".xlsx" />
+                <input type="file" id="file" class="required" name="file" accept=".xlsx" />
             </div>
         </div>
 
@@ -511,7 +521,7 @@ if ($xml_result) {
                     </select>
                 </div>
             </div>
-            <div class="form-row">
+            <!--    <div class="form-row">
                 <div class="form-group">
                     <label for="itemType">Primary Item Type</label>
                     <select size="1" name="itemType" id="itemType" class="required">
@@ -531,7 +541,7 @@ if ($xml_result) {
                         <option value="juvenile">Juvenile</option>
                     </select>
                 </div>
-            </div>
+            </div> -->
         </div>
 
         <!-- Report Options -->
@@ -579,7 +589,7 @@ if ($xml_result) {
 </main>
 
 <footer class="footer">
-    Alma Inventory Scanner &middot; Powered by Alma API
+    Alma Inventory Scanner &middot; Adapted for URochester Libraries from <a href="https://github.com/dlingley/alma_inventory_docker">dlingley's alma_inventory_docker</a> for use with PHP Desktop
 </footer>
 
 <!-- ===== JavaScript ===== -->
@@ -587,13 +597,13 @@ if ($xml_result) {
 $(document).ready(function() {
 
     // --- File Upload Display ---
-    var fileInput = document.getElementById('flie');
+    var fileInput = document.getElementById('file');
     var dropArea = document.getElementById('file-drop-area');
     var fileDisplay = document.getElementById('file-display-name');
 
     fileInput.addEventListener('change', function() {
         if (this.files.length > 0) {
-            fileDisplay.textContent = '✓ ' + this.files[0].name;
+            fileDisplay.textContent = '\u2713 ' + this.files[0].name;
             fileDisplay.style.display = 'block';
             dropArea.style.borderColor = '#22c55e';
         }
@@ -611,11 +621,32 @@ $(document).ready(function() {
         });
     });
 
-    // --- Toggle Switches → Hidden Radio Values ---
-    $('#toggle-onlyorder').change(function()    { $('#onlyorder-val').val(this.checked ? 'true' : 'false'); });
-    $('#toggle-onlyother').change(function()    { $('#onlyother-val').val(this.checked ? 'true' : 'false'); });
-    $('#toggle-onlyproblems').change(function() { $('#onlyproblems-val').val(this.checked ? 'true' : 'false'); });
-    $('#toggle-clearcache').change(function()   { $('#clearCache-val').val(this.checked ? 'true' : 'false'); });
+    // --- Toggle Switches → Hidden Field Sync ---
+    // Centralized function to ensure hidden fields ALWAYS match checkbox state
+    var updateHiddenValues = function() {
+        $('#onlyorder-val').val($('#toggle-onlyorder').prop('checked') ? 'true' : 'false');
+        $('#onlyother-val').val($('#toggle-onlyother').prop('checked') ? 'true' : 'false');
+        $('#onlyproblems-val').val($('#toggle-onlyproblems').prop('checked') ? 'true' : 'false');
+        $('#clearCache-val').val($('#toggle-clearcache').prop('checked') ? 'true' : 'false');
+    };
+
+    // Sync on page load
+    updateHiddenValues();
+
+    // Sync on every toggle change
+    $('.toggle input[type="checkbox"]').on('change', function() {
+        updateHiddenValues();
+    });
+
+    // Extra safety: sync on mousedown of submit button (fires before submit event)
+    $('.submit-btn').on('mousedown', function() {
+        updateHiddenValues();
+    });
+
+    // Extra safety: sync again right before form submits
+    $('#ShelfLister').on('submit', function() {
+        updateHiddenValues();
+    });
 
     // --- Library → Location AJAX Lookup ---
     $('#library').on('change', function() { loadLocations(); });
@@ -642,11 +673,80 @@ $(document).ready(function() {
     // Load locations for the initially selected library
     loadLocations();
 
-    // --- Form Submit ---
+    // --- Form Submit Handler ---
     $('#ShelfLister').on('submit', function() {
-        startProgress('pg', '<?php echo $progress_id; ?>');
+        // Triple-sync hidden fields before anything else
+        updateHiddenValues();
+        
+        var progressId = '<?php echo $progress_id; ?>';
+
+        // FORCE PRE-SUBMIT SYNC (for iframe timing issues)
+        updateHiddenValues();
+        
+        console.log('PRE-SUBMIT DEBUG:', {
+            timestamp: new Date().toISOString(),
+            progressId: progressId,
+            clearCache: $('#clearCache-val').val(),
+            onlyorder: $('#onlyorder-val').val(),
+            onlyother: $('#onlyother-val').val(),
+            onlyproblems: $('#onlyproblems-val').val()
+        });
+
+        window._progressId = progressId;
+
+        // Show overlay immediately
         $('#loading').addClass('active');
-        return true;
+        $('body').css('overflow', 'hidden');
+
+        // Clear any previous load listeners
+        $('#process_frame').off('load');
+
+        // Safe listener that waits for ACTUAL HTML content
+        $('#process_frame').one('load', function() {
+            console.log("Iframe load event fired");
+            console.log("Final POST values confirmed:", {
+                clearCache: $('#clearCache-val').val()
+            });
+
+            setTimeout(function() {
+                try {
+                    var iframeDoc = $('#process_frame')[0].contentDocument ||
+                                   $('#process_frame')[0].contentWindow.document;
+                    var bodyContent = iframeDoc.body.innerHTML.trim();
+
+                    console.log("Iframe body length:", bodyContent.length);
+
+                    if (bodyContent.length > 100) {
+                        console.log("Valid HTML detected, closing overlay");
+
+                        $('#loading')
+                            .removeClass('active')
+                            .hide()
+                            .css({
+                                'display': 'none',
+                                'pointer-events': 'none',
+                                'visibility': 'hidden',
+                                'z-index': '-1'
+                            });
+
+                        $('body').css('overflow', '');
+                        $('html, body').animate({ scrollTop: 0 }, 600);
+                        console.log("Overlay removed successfully");
+                    } else {
+                        console.log("Waiting for iframe content... (length:", bodyContent.length, ")");
+                        setTimeout(arguments.callee, 1000);
+                    }
+                } catch(e) {
+                    console.error("Error checking iframe content:", e);
+                    $('#loading').removeClass('active');
+                }
+            }, 500);
+        });
+
+        // Start progress polling for UX
+        startProgress('pg', progressId);
+
+        return true; // Allow form to submit normally
     });
 });
 
@@ -658,9 +758,8 @@ function startProgress(barName, progressId) {
 }
 
 function progressLoop(barName) {
-    console.log("Progress Called");
     $.ajax({
-        url: "getProgress.php?id=" + window._progressId,
+        url: "./getProgress.php?id=" + window._progressId,
         cache: false,
         dataType: "json",
         success: function(data) {
@@ -669,37 +768,44 @@ function progressLoop(barName) {
                 var pct = obj.percentage || 0;
                 var job = obj.job || 'Working...';
 
-                // Update the visual progress bar
                 document.getElementById('pg').value = pct;
                 document.getElementById('pg-fill').style.width = pct + '%';
                 document.getElementById('pg-percent').textContent = pct + '%';
-                document.getElementById('progress-job').textContent = job === 'complete' ? 'Finishing up...' : job;
 
-                if (obj.job === "complete") {
-                    document.getElementById('pg-fill').style.width = '100%';
-                    document.getElementById('pg-percent').textContent = '100%';
-                    document.getElementById('progress-job').textContent = 'Loading results...';
-                    // Show results from iframe
-                    var iframe = document.getElementById('process_frame');
-                    var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    if (iframeDoc && iframeDoc.body && iframeDoc.body.innerHTML.length > 0) {
-                        document.open();
-                        document.write(iframeDoc.documentElement.outerHTML);
-                        document.close();
-                    } else {
-                        setTimeout(function() { progressLoop(barName); }, 1000);
-                    }
+                if (pct >= 99 && job !== 'complete') {
+                    document.getElementById('progress-job').textContent = 'Finalizing report...';
+                } else if (job === 'complete') {
+                    document.getElementById('progress-job').textContent = 'Done!';
+
+                    setTimeout(function() {
+                        $('#loading').removeClass('active');
+                    }, 1000);
+
+                    return; // Exit the polling loop
                 } else {
+                    document.getElementById('progress-job').textContent = job;
+                }
+
+                // Continue polling unless complete
+                if (job !== 'complete') {
                     setTimeout(function() { progressLoop(barName); }, 2000);
                 }
             } catch(e) {
-                console.log("Progress error: " + e);
+                console.error("Progress error:", e);
                 setTimeout(function() { progressLoop(barName); }, 2000);
             }
         },
         error: function(xhr, status, err) {
-            console.log("pERROR: " + err + " — retrying...");
-            setTimeout(function() { progressLoop(barName); }, 2000);
+            console.error("Progress polling error:", xhr.status, err);
+
+            // Fallback: if iframe loads, assume complete
+            var iframeLoaded = document.getElementById('process_frame').contentWindow?.document.body;
+            if (iframeLoaded && iframeLoaded.innerHTML.trim().length > 100) {
+                console.log("Fallback: iframe loaded, assuming complete");
+                $('#loading').removeClass('active');
+            } else {
+                setTimeout(function() { progressLoop(barName); }, 3000);
+            }
         }
     });
 }

@@ -3,4 +3,6 @@ vendor/
 cache/barcodes/*.xml
 cache/upload/*.xlsx
 cache/output/*.csv
+cache/progress/*.marker
 key.php
+cacert.pem
