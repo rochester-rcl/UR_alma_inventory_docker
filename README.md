@@ -1,7 +1,9 @@
 # UR_alma_inventory_php_desktop
 
-Alma Inventory API application that can be launched using [PHP Desktop](https://github.com/cztomczak/phpdesktop) on Windows.   
+-Alma Inventory API application that can be launched using [PHP Desktop](https://github.com/cztomczak/phpdesktop) on Windows.   
 For background on the application, see the [Ex Libris Developer Blog post](https://developers.exlibrisgroup.com/blog/Shelf-Inventory-using-Alma-APIs).
+
+-Intent is to deploy this app on a small scale for use on stacks staff laptops and is not intended to be deployed at scale in its current state.
 
 ---
 
