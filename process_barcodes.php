@@ -784,7 +784,7 @@ if (isset($_POST['submit'])) {
         echo '  <div class="barcode-count">Processed <strong>' . $barcode_count . '</strong> barcodes &middot; <strong>' . $total_problems . '</strong> issues found</div>';
         echo '  <div style="display:flex;gap:0.5rem;">';
         echo '    <a href="index.php" class="action-btn action-btn-outline">← Run New File</a>';
-        echo '    <a href="cache/output/' . htmlspecialchars($csv_output_filename) . '" class="action-btn action-btn-primary">↓ Download CSV</a>';
+        echo '    <a href="download_csv.php?filename=' . urlencode($csv_output_filename) . '" class="action-btn action-btn-primary">↓ Download CSV</a>';
         echo '  </div>';
         echo '</div>';
         
