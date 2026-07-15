@@ -16,7 +16,7 @@ For background on the application, see the [Ex Libris Developer Blog post](https
 ## Configuration
 
 - Add project files to ```www``` PHP Desktop folder.
-- Download the ```cacert.pem``` file and place in ```www``` directory from [CA certificates extracted from Mozilla](https://curl.se/docs/caextract.html)
+- Download a [CA certificate in PEM format from Mozzila](https://curl.se/ca/cacert.pem) and place in ```www``` directory.
 - Modify ```php.ini``` in the ```php``` folder to point to the CA certs and activate additional extensions:
 ```
 [curl]
